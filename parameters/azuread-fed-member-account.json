@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "ManagementAccountId",
+    "ParameterValue": "111122223333"
+  },
+  {
+    "ParameterKey": "IAMUserName",
+    "ParameterValue": "AzureADAutomationUser"
+  },
+  {
+    "ParameterKey": "IAMUserGroupName",
+    "ParameterValue": "AzureADAutomationGroup"
+  },
+  {
+    "ParameterKey": "AzureAdFederationAdminRoleName",
+    "ParameterValue": "AzureAdFederationAdminRole"
+  },
+  {
+    "ParameterKey": "AzureAdFederationAssumeRoleName",
+    "ParameterValue": "AzureAdFederationAssumeRole"
+  }
+]

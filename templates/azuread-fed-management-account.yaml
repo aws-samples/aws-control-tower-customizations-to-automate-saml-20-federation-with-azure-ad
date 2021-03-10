@@ -1,0 +1,148 @@
+ # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ # SPDX-License-Identifier: MIT-0
+ #
+ # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ # software and associated documentation files (the "Software"), to deal in the Software
+ # without restriction, including without limitation the rights to use, copy, modify,
+ # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ # permit persons to whom the Software is furnished to do so.
+ #
+ # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+ # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ 
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  IAMUserName:
+    Type: String 
+    Description: The IAM User name to be used to sync the roles for Azure AD federation
+    Default: AzureADAutomationUser
+  IAMUserGroupName:
+    Type: String
+    Description: The IAM Group name that the IAMUserName will be placed within. 
+    Default: AzureADAutomationGroup
+  AzureAdFederationAdminRoleName:
+    Type: String
+    Description: The name of the role to be created within the management account. Users will sign in with this role to then assume role to the application account.
+    Default: AzureAdFederationAdminRole
+  AzureAdFederationAssumeRoleName:
+    Type: String
+    Description: The name of the role to be created within the application account. This will be the role assumed from the management account.
+    Default: AzureAdFederationAssumeRole
+  OrganizationId:
+    Type: String
+    Description: The AWS Organization Id
+  SAMLProviderName:
+    Type: String
+    Description: The name of the SAML Provider. This is used to setup the IAM trust relationship for AzureAdFederationAdminRoleName
+
+Resources:
+  # Only allow assumerole from this role to the AzureAdFederationAssumeRole in member accounts
+  # Only allow the role to view the iam user secret for the IAMUserName user.
+  AzureAdFederationAdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref AzureAdFederationAdminRoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement: 
+          - Effect: Allow
+            Action: 
+              - sts:AssumeRoleWithSAML
+            Principal: 
+              Federated: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+      Policies:
+        # Allow AssumeRole to all accounts within the AWS Organization to the AzureAdFederationAssumeRoleName role
+        - PolicyName: AllowAssumeRole
+          PolicyDocument: 
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: !Sub "arn:aws:iam::*:role/${AzureAdFederationAssumeRoleName}"
+                Condition:
+                  StringEquals:
+                    "aws:PrincipalOrgID": !Ref OrganizationId
+        # The secretsmanager:ListSecrets action does not support resource-level permissions or condition keys.
+        # https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssecretsmanager.html
+        - PolicyName: "GetAzureAdIAMUserSecrets"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                  - "secretsmanager:DescribeSecret"
+                Resource: !Ref CFNUserSecret
+              - Effect: Allow
+                Action: 
+                  - "secretsmanager:ListSecrets"
+                Resource: "*"
+
+  # Creates the user only allowing iam:ListRoles. This user is used by Azure AD to sync roles for federation.
+  CFNUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Ref IAMUserName
+  # The iam:ListRoles action does not support resource-level permissions or condition keys.
+  # https://docs.aws.amazon.com/service-authorization/latest/reference/list_identityandaccessmanagement.html
+  CFNUserGroupPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: "AzureADAllowIAMListRoles"
+      Path: "/"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "iam:ListRoles"
+            Resource: "*"
+  CFNUserGroup:
+    DependsOn: CFNUserGroupPolicy
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Ref IAMUserGroupName     
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::${AWS::AccountId}:policy/AzureADAllowIAMListRoles"
+  CFNUserToGroup:
+    DependsOn:
+      - CFNUser
+      - CFNUserGroup
+    Type: AWS::IAM::UserToGroupAddition
+    Properties:
+      GroupName: !Ref IAMUserGroupName
+      Users:
+        - !Ref IAMUserName
+
+  # Create and store the IAM access keys for the User
+  CFNKeys:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref CFNUser
+
+  CFNUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: 'These are the secrets for the CFNUser'
+      Name: 'AzureADFederation/CFNUserSecretAccessKey'
+      SecretString: !Join [ 
+        '',
+        [
+          '{ "AccessKey": "',
+          !Ref CFNKeys,
+          '", "SecretKey": "',
+          !GetAtt [CFNKeys, SecretAccessKey],
+          '", "UserName": "',
+          !Ref IAMUserName,
+          '" }'
+          ]
+        ]
