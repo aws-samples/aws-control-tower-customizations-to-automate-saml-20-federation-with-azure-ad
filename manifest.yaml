@@ -1,0 +1,61 @@
+---
+#Default region for deploying Custom Control Tower: Code Pipeline, Step functions, Lambda, SSM parameters, and StackSets
+region: us-east-1
+version: 2021-03-15
+
+
+resources:
+
+  #==================================================================================================
+  # Azure AD Federation - Management Account
+  #==================================================================================================
+  - name: azure-ad-federation-automation-management
+    resource_file: templates/azuread-fed-management-account.yaml
+    parameters:
+      - parameter_key: OrganizationId
+        #parameter_value: "o-aaa111bbb2222"
+        parameter_value: "o-fjsp9slj5y"
+      - parameter_key: SAMLProviderName
+        parameter_value: "aad"
+      - parameter_key: IAMUserName
+        parameter_value: "AzureADAutomationUser"
+      - parameter_key: IAMUserGroupName
+        parameter_value: "AzureADAutomationGroup"
+      - parameter_key: AzureAdFederationAdminRoleName
+        parameter_value: "AzureAdFederationAdminRole"
+      - parameter_key: AzureAdFederationAssumeRoleName
+        parameter_value: "AzureAdFederationAssumeRole"
+    deploy_method: stack_set
+    deployment_targets:
+      accounts:
+        #- 111122223333
+        - 679878131213
+    regions:
+      - us-east-1
+
+  #==================================================================================================
+  # Azure AD Federation - Member  Account
+  #==================================================================================================
+  - name: azure-ad-federation-automation-member
+    resource_file: templates/azuread-fed-member-account.yaml
+    parameters:
+      - parameter_key: ManagementAccountId
+        #parameter_value: "111122223333"
+        parameter_value: "679878131213"
+      - parameter_key: IAMUserName
+        parameter_value: "AzureADAutomationUser"
+      - parameter_key: IAMUserGroupName
+        parameter_value: "AzureADAutomationGroup"
+      - parameter_key: AzureAdFederationAdminRoleName
+        parameter_value: "AzureAdFederationAdminRole"
+      - parameter_key: AzureAdFederationAssumeRoleName
+        parameter_value: "AzureAdFederationAssumeRole"
+    deploy_method: stack_set
+    deployment_targets:
+      organizational_units:
+        - Core
+        #- infrastructure
+        #- workloads
+        - Custom
+    regions:
+      - us-east-1

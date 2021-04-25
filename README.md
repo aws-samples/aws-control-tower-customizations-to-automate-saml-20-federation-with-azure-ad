@@ -10,7 +10,7 @@ A diagram of the workflow is included below.
 * [Customizations for AWS Control Tower](https://aws.amazon.com/solutions/implementations/customizations-for-aws-control-tower/)
 
 ## Usage
-Deploy the following templates using the Customizations for AWS Control Tower.  
+Deploy the following templates using the Customizations for AWS Control Tower. See the sample manifest.yaml file for deployment snippets.  
 
 **azuread-fed-management-account.yaml** - Must be deployed to the management account  
 **azuread-fed-member-account.yaml** - Must be deployed to all member accounts requiring Azure AD federation  
